@@ -43,9 +43,9 @@ public:
         };
     };
 
-    IndexOptions options;
-    Distance distance;
     Random random;
+    Distance distance;
+    IndexOptions options;
 
 private:
     struct Node {

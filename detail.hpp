@@ -21,10 +21,10 @@ struct FurthestResultComparator {
 
 
 template<class Base>
-class SequenceAccessQueue : public Base {
+class ValuesAccessQueue : public Base {
 public:
-    using base_type = Base;
     using Base::c;
+    typename Base::container_type &values = c;
 };
 
 }
