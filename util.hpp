@@ -2,10 +2,10 @@
 
 namespace hnsw {
 
-namespace detail {
+namespace util {
 
 struct ClosestResultComparator {
-    template<class T>
+    template<typename T>
     bool operator()(const T &l, const T &r) const {
         return l.second < r.second;
     }
@@ -13,14 +13,14 @@ struct ClosestResultComparator {
 
 
 struct FurthestResultComparator {
-    template<class T>
+    template<typename T>
     bool operator()(const T &l, const T &r) const {
         return l.second > r.second;
     }
 };
 
 
-template<class Base>
+template<typename Base>
 class ValuesAccessQueue : public Base {
 public:
     using Base::c;

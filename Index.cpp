@@ -9,7 +9,7 @@
 #include <xmmintrin.h>
 #include "flat_map.hpp"
 #include "distance.hpp"
-#include "detail.hpp"
+#include "util.hpp"
 
 namespace hnsw {
 
@@ -18,10 +18,10 @@ struct IndexOptions {
     size_t search_horizon_size = 100;
 };
 
-template<class Key,
-        class Vector,
-        class Distance,
-        class Random = std::minstd_rand>
+template<typename Key,
+        typename Vector,
+        typename Distance,
+        typename Random = std::minstd_rand>
 class Index {
 public:
     using Scalar = decltype(std::declval<Distance>()(std::declval<Vector>(), std::declval<Vector>()));
@@ -111,7 +111,7 @@ public:
 
             // for lower layers — connect to neighbors found by doing a search
             if (layer <= node_level) {
-                detail::ValuesAccessQueue<FurthestFirstQueue> neighbors;
+                util::ValuesAccessQueue<FurthestFirstQueue> neighbors;
                 search_level(node.vector, options.search_horizon_size * 2, layer - 1,
                              {current_search_key}, neighbors);
 
@@ -143,7 +143,7 @@ public:
             start = greedy_search(target, layer - 1, start);
         }
 
-        detail::ValuesAccessQueue<FurthestFirstQueue> results;
+        util::ValuesAccessQueue<FurthestFirstQueue> results;
         search_level(target, std::max(nearest_neighbors, ef), 0, {start}, results);
 
         size_t results_to_return = std::min(results.size(), nearest_neighbors);
@@ -184,7 +184,7 @@ private:
                       FurthestFirstQueue &results) const {
         std::unordered_set<Key> visited_nodes(current_front.begin(), current_front.end());
 
-        detail::ValuesAccessQueue<ClosestFirstQueue> search_front;
+        util::ValuesAccessQueue<ClosestFirstQueue> search_front;
         for (const Key &key: current_front) {
             auto distance_to_target = distance(target, nodes.at(key).vector);
             results.push({key, distance_to_target});
@@ -326,7 +326,7 @@ private:
 }
 
 int main() {
-    auto index = hnsw::Index<u_int32_t, std::vector<float>, hnsw::l2_square_distance_t>();
+    auto index = hnsw::Index<u_int32_t, std::vector<float>, hnsw::CosineDistance>();
 
     for (u_int32_t i = 0; i < 10; ++i) {
         auto key = i;
