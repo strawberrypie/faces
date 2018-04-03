@@ -14,17 +14,9 @@
 namespace hnsw {
 
 struct IndexOptions {
-    enum class InsertStrategy {
-        link_nearest,
-        link_diverse
-    };
-
     size_t max_links = 32;
     size_t search_horizon_size = 100;
-    InsertStrategy insert_method = InsertStrategy::link_diverse;
 };
-
-
 
 template<class Key,
         class Vector,
@@ -112,26 +104,22 @@ public:
             return;
         }
 
-
         Key current_search_key = *levels.rbegin()->second.begin(); // picks a node from the highest level
         for (size_t layer = nodes[current_search_key].layers.size(); layer > 0; --layer) {
+            // for upper layers — search for the closer node
             current_search_key = greedy_search(node.vector, layer - 1, current_search_key);
 
+            // for lower layers — connect to neighbors found by doing a search
             if (layer <= node_level) {
-                detail::SequenceAccessQueue<FurthestFirstQueue> results;
-                search_level(node.vector,
-                             options.search_horizon_size * 2,
-                             layer - 1,
-                             {current_search_key},
-                             results);
+                detail::ValuesAccessQueue<FurthestFirstQueue> neighbors;
+                search_level(node.vector, options.search_horizon_size * 2, layer - 1,
+                             {current_search_key}, neighbors);
 
-                std::sort(results.c.begin(), results.c.end());
-                set_links(key, layer - 1, results.c);
+                std::sort(neighbors.values.begin(), neighbors.values.end());
+                connect_set_exclusively(key, neighbors.values, layer - 1);
 
-                // NOTE: Here we attempt to link all candidates to the new item.
-                // The original HNSW attempts to link only with the actual neighbors.
-                for (const auto &peer: results.c) {
-                    try_add_link(peer.key, layer - 1, key, peer.distance);
+                for (const auto &peer: neighbors.values) {
+                    connect(peer.key, key, peer.distance, layer - 1);
                 }
             }
         }
@@ -155,100 +143,22 @@ public:
             start = greedy_search(target, layer - 1, start);
         }
 
-        detail::SequenceAccessQueue<FurthestFirstQueue> results;
+        detail::ValuesAccessQueue<FurthestFirstQueue> results;
         search_level(target, std::max(nearest_neighbors, ef), 0, {start}, results);
 
         size_t results_to_return = std::min(results.size(), nearest_neighbors);
         std::partial_sort(
-                results.c.begin(),
-                results.c.begin() + results_to_return,
-                results.c.end()
+                results.values.begin(),
+                results.values.begin() + results_to_return,
+                results.values.end()
         );
 
         std::vector<SearchResult> results_vector(results_to_return);
         for (size_t i = 0; i < results_to_return; ++i) {
-            results_vector[i] = {results.c[i].key, results.c[i].distance};
+            results_vector[i] = {results.values[i].key, results.values[i].distance};
         }
         return results_vector;
     }
-
-
-    // Check whether the index satisfies its invariants.
-    bool check() const {
-        if (nodes.empty()) {
-            return levels.empty();
-        }
-
-        for (const auto &node: nodes) {
-            auto level_it = levels.find(node.second.layers.size());
-
-            if (level_it == levels.end()) {
-                return false;
-            }
-
-            if (level_it->second.count(node.first) == 0) {
-                return false;
-            }
-
-            for (size_t layer = 0; layer < node.second.layers.size(); ++layer) {
-                const auto &links = node.second.layers[layer].out_edges;
-
-                // Self-links are not allowed.
-                if (links.count(node.first) > 0) {
-                    return false;
-                }
-
-                for (const auto &link: links) {
-                    auto peer_node_it = nodes.find(link.first);
-
-                    if (peer_node_it == nodes.end()) {
-                        return false;
-                    }
-
-                    if (layer >= peer_node_it->second.layers.size()) {
-                        return false;
-                    }
-
-                    if (peer_node_it->second.layers[layer].in_edges.count(node.first) == 0) {
-                        return false;
-                    }
-                }
-
-                for (const auto &link: node.second.layers[layer].in_edges) {
-                    auto peer_node_it = nodes.find(link);
-
-                    if (peer_node_it == nodes.end()) {
-                        return false;
-                    }
-
-                    if (layer >= peer_node_it->second.layers.size()) {
-                        return false;
-                    }
-
-                    if (peer_node_it->second.layers[layer].out_edges.count(node.first) == 0) {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        for (const auto &level: levels) {
-            for (const auto &key: level.second) {
-                auto node_it = nodes.find(key);
-
-                if (node_it == nodes.end()) {
-                    return false;
-                }
-
-                if (level.first != node_it->second.layers.size()) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
 
 private:
     size_t max_links(size_t level) const {
@@ -274,7 +184,7 @@ private:
                       FurthestFirstQueue &results) const {
         std::unordered_set<Key> visited_nodes(current_front.begin(), current_front.end());
 
-        detail::SequenceAccessQueue<ClosestFirstQueue> search_front;
+        detail::ValuesAccessQueue<ClosestFirstQueue> search_front;
         for (const Key &key: current_front) {
             auto distance_to_target = distance(target, nodes.at(key).vector);
             results.push({key, distance_to_target});
@@ -312,8 +222,8 @@ private:
             }
 
             // Try to make search_front smaller, so to speed up operations on it.
-            while (!search_front.empty() && (search_front.c.back().distance > results.top().distance)) {
-                search_front.c.pop_back();
+            while (!search_front.empty() && (search_front.values.back().distance > results.top().distance)) {
+                search_front.values.pop_back();
             }
         }
     }
@@ -349,169 +259,65 @@ private:
         return result;
     }
 
-    void try_add_link(const Key &node,
-                      size_t layer,
-                      const Key &new_link,
-                      Scalar link_distance) {
-        auto &layer_links = nodes[node].layers[layer].out_edges;
+    void connect(const Key &node_from, const Key &node_to, Scalar link_distance, size_t layer) {
+        /* Creates a bidirectional link between node_from and node_to. */
+        auto &out_edges = nodes[node_from].layers[layer].out_edges;
 
-        if (layer_links.size() < max_links(layer)) {
-            layer_links.emplace(new_link, link_distance);
-            nodes[new_link].layers[layer].in_edges.insert(node);
+        // if there is space for new links
+        if (out_edges.size() < max_links(layer)) {
+            // connect bidirectionally
+            out_edges.emplace(node_to, link_distance);
+            nodes[node_to].layers[layer].in_edges.insert(node_from);
             return;
         }
 
-        if (options.insert_method == IndexOptions::InsertStrategy::link_nearest) {
-            auto furthest_key = layer_links.begin()->first;
-            auto furthest_distance = layer_links.begin()->second;
+        /* otherwise keep only max_links(layer) connections to the closest nodes to node_from */
+        auto furthest_key = out_edges.begin()->first;
+        auto furthest_distance = out_edges.begin()->second;
 
-            for (const auto& candidate : layer_links) {
-                auto& key = candidate.first;
-                auto& distance = candidate.second;
-                if (key == new_link) {
-                    return;
-                }
-
-                if (distance > furthest_distance) {
-                    furthest_key = key;
-                    furthest_distance = distance;
-                }
+        for (const auto& candidate : out_edges) {
+            auto& key = candidate.first;
+            auto& distance = candidate.second;
+            if (key == node_to) {
+                return;
             }
 
-            if (link_distance < furthest_distance) {
-                layer_links.erase(furthest_key);
-                nodes[furthest_key].layers[layer].in_edges.erase(node);
-                layer_links.emplace(new_link, link_distance);
-                nodes[new_link].layers[layer].in_edges.insert(node);
-            }
-
-            return;
-        }
-
-        std::vector<std::pair<Key, Scalar>> sorted_links(layer_links.begin(), layer_links.end());
-        std::sort(sorted_links.begin(),
-                  sorted_links.end(),
-                  [](const auto &l, const auto &r) { return l.second < r.second; });
-
-        if (link_distance >= sorted_links.back().second) {
-            return;
-        }
-
-        bool insert = true;
-        size_t replace_index = sorted_links.size() - 1;
-        const auto &new_link_vector = nodes[new_link].vector;
-
-        for (const auto &link: sorted_links) {
-            if (link.first == new_link) {
-                insert = false;
-                break;
+            if (distance > furthest_distance) {
+                furthest_key = key;
+                furthest_distance = distance;
             }
         }
 
-        if (insert) {
-            for (size_t i = 0; i < sorted_links.size(); ++i) {
-                const Key &current_node = sorted_links[i].first;
-                const Scalar &current_distance = sorted_links[i].second;
-
-                if (link_distance >= current_distance) {
-                    if (link_distance > distance(new_link_vector, nodes[current_node].vector)) {
-                        insert = false;
-                        break;
-                    }
-                } else if (replace_index > i) {
-                    if (current_distance > distance(new_link_vector, nodes[current_node].vector)) {
-                        replace_index = i;
-                    }
-                }
-            }
-        }
-
-        if (insert) {
-            const Key& replacement_candidate_key = sorted_links[replace_index].first;
-            nodes[replacement_candidate_key].layers[layer].in_edges.erase(node);
-            nodes[new_link].layers[layer].in_edges.insert(node);
-            layer_links.erase(replacement_candidate_key);
-            layer_links.emplace(new_link, link_distance);
+        if (link_distance < furthest_distance) {
+            out_edges.erase(furthest_key);
+            nodes[furthest_key].layers[layer].in_edges.erase(node_from);
+            out_edges.emplace(node_to, link_distance);
+            nodes[node_to].layers[layer].in_edges.insert(node_from);
         }
     }
 
-
-    // new_links_set - *sorted by distance to the node* sequence of unique elements
-    void set_links(const Key &node,
-                   size_t layer,
-                   const std::vector<SearchResult> &new_links_set) {
-        size_t required_links_count = max_links(layer);
-        std::vector<SearchResult> new_links;
-        new_links.reserve(required_links_count);
-
-        if (options.insert_method == IndexOptions::InsertStrategy::link_nearest) {
-            new_links.assign(
-                    new_links_set.begin(),
-                    new_links_set.begin() + std::min(new_links_set.size(), required_links_count)
-            );
-        } else {
-            select_diverse_links(max_links(layer), new_links_set, new_links);
-        }
-
-        auto &outgoing_links = nodes[node].layers[layer].out_edges;
-
-        for (const auto &link: outgoing_links) {
+    
+    void connect_set_exclusively(const Key &node, const std::vector<SearchResult> &links_set, size_t layer) {
+        /* Replaces the connections from node with connections to links_set. */
+        auto &out_edges = nodes[node].layers[layer].out_edges;
+        for (const auto &link: out_edges) {
             nodes[link.first].layers[layer].in_edges.erase(node);
         }
 
+        // and connect to new ones
+        std::vector<SearchResult> new_links(
+                links_set.begin(),
+                links_set.begin() + std::min(links_set.size(), max_links(layer))
+        );
         std::sort(new_links.begin(), new_links.end(), [](const auto &l, const auto &r) { return l.key < r.key; });
         std::vector<std::pair<Key, Scalar>> transformed_links(new_links.size());
         std::transform(new_links.begin(), new_links.end(),
                        transformed_links.begin(),
                        [](const SearchResult& entry) {return entry.ToPair();});
-        outgoing_links.assign_ordered_unique(transformed_links.begin(), transformed_links.end());
+        out_edges.assign_ordered_unique(transformed_links.begin(), transformed_links.end());
 
         for (const auto &entry: new_links) {
             nodes[entry.key].layers[layer].in_edges.insert(node);
-        }
-    }
-
-
-    void select_diverse_links(size_t links_number,
-                              const std::vector<SearchResult> &candidates,
-                              std::vector<SearchResult> &result) const {
-        std::vector<const Vector *> links_vectors;
-        links_vectors.reserve(links_number);
-
-        std::vector<SearchResult> rejected;
-        rejected.reserve(links_number);
-
-        for (const auto &candidate: candidates) {
-            if (result.size() >= links_number) {
-                break;
-            }
-
-            const auto &candidate_vector = nodes.at(candidate.key).vector;
-            bool reject = false;
-
-            for (const auto &link_vector: links_vectors) {
-                if (distance(candidate_vector, *link_vector) < candidate.distance) {
-                    reject = true;
-                    break;
-                }
-            }
-
-            if (reject) {
-                if (rejected.size() < links_number) {
-                    rejected.push_back(candidate);
-                }
-            } else {
-                result.push_back(candidate);
-                links_vectors.push_back(&candidate_vector);
-            }
-        }
-
-        for (const auto &link: rejected) {
-            if (result.size() >= links_number) {
-                break;
-            }
-
-            result.push_back(link);
         }
     }
 
@@ -522,7 +328,6 @@ private:
 int main() {
     auto index = hnsw::Index<u_int32_t, std::vector<float>, hnsw::l2_square_distance_t>();
 
-    index.options.insert_method = hnsw::IndexOptions::InsertStrategy::link_diverse;
     for (u_int32_t i = 0; i < 10; ++i) {
         auto key = i;
         auto vector = std::vector<float> {
@@ -539,7 +344,5 @@ int main() {
     for (const auto& result : query) {
         std::cout << result.key << " " << result.distance << std::endl;
     }
-
-    std::cout << "Check complete: " << (index.check() ? "True" : "False") << std::endl;
     return 0;
 }
