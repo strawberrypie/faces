@@ -62,29 +62,19 @@ public:
             auto search_result = index.search(vector, k);
             for (size_t j = 0; j < k; ++j) {
                 result_keys[k * i + j] = search_result[j].key;
-                result_distances[k * i + j] = search_result[j].key;
+                result_distances[k * i + j] = search_result[j].distance;
             }
         }
-
-        py::capsule free_when_done_keys(result_keys.data(), [](void *f) {
-            delete[] f;
-        });
-
-        py::capsule free_when_done_distances(result_distances.data(), [](void *f) {
-            delete[] f;
-        });
 
         return py::make_tuple(
                 py::array_t<KeyType>(
                         {rows, k},
                         {k * sizeof(KeyType), sizeof(KeyType)},
-                        result_keys.data(),
-                        free_when_done_keys),
+                        result_keys.data()),
                 py::array_t<float>(
                         {rows, k},
                         {k * sizeof(float), sizeof(float)},
-                        result_distances.data(),
-                        free_when_done_distances)
+                        result_distances.data())
                 );
     }
 
