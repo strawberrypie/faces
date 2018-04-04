@@ -5,7 +5,7 @@
 
 namespace py = pybind11;
 
-using KeyType = uint32_t;
+using KeyType = int64_t;
 using VectorType = std::vector<float>;
 using DistanceType = hnsw::CosineDistance;
 using IndexType = hnsw::Index<KeyType, VectorType, DistanceType>;
@@ -22,8 +22,8 @@ public:
         size_t rows = buffer.shape[0];
         size_t features = buffer.shape[1];
 
-        std::vector<size_t> ids;
-        py::array_t<size_t, py::array::c_style | py::array::forcecast> keys(_keys);
+        std::vector<KeyType> ids;
+        py::array_t<KeyType, py::array::c_style | py::array::forcecast> keys(_keys);
 
         size_t keys_count = keys.request().shape[0];
         if (keys_count != rows) {
@@ -52,7 +52,7 @@ public:
 
         if (buffer.ndim != 2) throw std::runtime_error("data must be a 2d array");
 
-        std::vector<size_t> result_keys(rows * k);
+        std::vector<KeyType> result_keys(rows * k);
         std::vector<float> result_distances(rows * k);
         for (size_t i = 0; i < rows; ++i) {
             VectorType vector(features);
@@ -75,9 +75,9 @@ public:
         });
 
         return py::make_tuple(
-                py::array_t<size_t>(
+                py::array_t<KeyType>(
                         {rows, k},
-                        {k * sizeof(size_t), sizeof(size_t)},
+                        {k * sizeof(KeyType), sizeof(KeyType)},
                         result_keys.data(),
                         free_when_done_keys),
                 py::array_t<float>(
@@ -94,8 +94,8 @@ public:
 
 using BridgeType = HNSWIndex;
 
-PYBIND11_PLUGIN(hnsw) {
-    py::module m("hnsw");
+PYBIND11_PLUGIN(hnsw_index) {
+    py::module m("hnsw_index");
 
     py::class_<BridgeType>(m, "HNSWIndex")
             .def(py::init<const int>(), py::arg("dim"))
