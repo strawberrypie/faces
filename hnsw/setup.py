@@ -15,7 +15,7 @@ extra_objects = []
 
 ext_modules = [
     Extension(
-        'hnsw',
+        'hnsw_index',
         source_files,
         # include_dirs=[os.path.join(libdir, "include")],
         libraries=libraries,
@@ -66,8 +66,8 @@ class BuildExt(build_ext):
     }
 
     if sys.platform == 'darwin':
-        c_opts['unix'] += ['-fopenmp']
-        link_opts['unix'] += ['-fopenmp']
+        c_opts['unix'] += ['-static-libstdc++', '-mmacosx-version-min=10.7', '-fopenmp']
+        link_opts['unix'] += ['-static-libstdc++', '-mmacosx-version-min=10.7', '-fopenmp']
     else:
         c_opts['unix'].append("-fopenmp")
         link_opts['unix'].extend(['-fopenmp', '-pthread'])
@@ -106,9 +106,6 @@ setup(
     name='hnsw_index',
     version=__version__,
     description='hnsw_index',
-    # author='Yury Malkov and others',
-    # url='https://github.com/yurymalkov/hnsw',
-    # long_description="""hnsw""",
     ext_modules=ext_modules,
     install_requires=['pybind11>=2.0', 'numpy'],
     cmdclass={'build_ext': BuildExt},

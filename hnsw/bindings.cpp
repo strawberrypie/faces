@@ -1,7 +1,7 @@
 #include <iostream>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include "../hnsw/index.cpp"
+#include "Index.cpp"
 
 namespace py = pybind11;
 
