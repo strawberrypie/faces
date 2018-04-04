@@ -107,7 +107,7 @@ public:
         Key current_search_key = *levels.rbegin()->second.begin(); // picks a node from the highest level
         for (size_t layer = nodes[current_search_key].layers.size(); layer > 0; --layer) {
             // for upper layers — search for the closer node
-            current_search_key = greedy_search(node.vector, layer - 1, current_search_key);
+            current_search_key = greedy_search(node.vector, current_search_key, layer - 1);
 
             // for lower layers — connect to neighbors found by doing a search
             if (layer <= node_level) {
@@ -140,7 +140,7 @@ public:
 
         Key start = *levels.rbegin()->second.begin();
         for (size_t layer = nodes.at(start).layers.size(); layer > 0; --layer) {
-            start = greedy_search(target, layer - 1, start);
+            start = greedy_search(target, start, layer - 1);
         }
 
         util::ValuesAccessQueue<FurthestFirstQueue> results;
@@ -184,6 +184,7 @@ private:
                       FurthestFirstQueue &results) const {
         std::unordered_set<Key> visited_nodes(current_front.begin(), current_front.end());
 
+        // initialize the search front
         util::ValuesAccessQueue<ClosestFirstQueue> search_front;
         for (const Key &key: current_front) {
             auto distance_to_target = distance(target, nodes.at(key).vector);
@@ -191,18 +192,16 @@ private:
             search_front.push({key, distance_to_target});
         }
 
-        while (results.size() > n_results) {
-            results.pop();
-        }
-
+        // main loop of the search
         for (size_t hop = 0; !search_front.empty() &&
                              (search_front.top().distance <= results.top().distance) &&
                              (hop < nodes.size()); ++hop) {
+            // pick a node
             const Node &current_node = nodes.at(search_front.top().key);
-            const auto &links = current_node.layers[layer].out_edges;
             search_front.pop();
+            const auto &links = current_node.layers[layer].out_edges;
 
-
+            // extend the front with closer neighbors
             for (const auto &link: links) {
                 const Key& link_key = link.first;
                 bool is_link_unvisited = visited_nodes.insert(link_key).second;
@@ -221,21 +220,28 @@ private:
                 }
             }
 
-            // Try to make search_front smaller, so to speed up operations on it.
+            // reduce the front size
             while (!search_front.empty() && (search_front.values.back().distance > results.top().distance)) {
                 search_front.values.pop_back();
             }
         }
+
+        // leave only the required number of results
+        while (results.size() > n_results) {
+            results.pop();
+        }
     }
 
 
-    Key greedy_search(const Vector &target, size_t layer, const Key &start_from) const {
+    Key greedy_search(const Vector &target, const Key &start_from, size_t layer) const {
+        /* Searches greedily for a closest node in index to target vector.
+         * Starts from `start_from`, and works on the level `layer`.*/
         Key result = start_from;
         Scalar result_distance = distance(target, nodes.at(start_from).vector);
 
-        // Just a reasonable upper limit on the number of hops to avoid infinite loops.
+        /* Let's hop to a closer neighbor while we can. */
         for (size_t hops = 0; hops < nodes.size(); ++hops) {
-            const auto &node = nodes.at(result);
+            const Node &node = nodes.at(result);
             bool is_hop_made = false;
 
             const auto &links = node.layers[layer].out_edges;
@@ -271,7 +277,7 @@ private:
             return;
         }
 
-        /* otherwise keep only max_links(layer) connections to the closest nodes to node_from */
+        // otherwise keep only max_links(layer) connections to the closest nodes to node_from
         auto furthest_key = out_edges.begin()->first;
         auto furthest_distance = out_edges.begin()->second;
 
@@ -304,7 +310,6 @@ private:
             nodes[link.first].layers[layer].in_edges.erase(node);
         }
 
-        // and connect to new ones
         std::vector<SearchResult> new_links(
                 links_set.begin(),
                 links_set.begin() + std::min(links_set.size(), max_links(layer))
