@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <random>
 #include <iostream>
 #include <map>
@@ -5,11 +6,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <queue>
-#include <cassert>
-#include <xmmintrin.h>
-#include "flat_map.hpp"
+#include <boost/container/flat_map.hpp>
 #include "distance.hpp"
 #include "util.hpp"
+
+using boost::container::flat_map;
 
 namespace hnsw {
 
@@ -81,7 +82,7 @@ public:
 
     void insert(const Key &key, Vector &&vector) {
         if (nodes.count(key) > 0) {
-            throw std::runtime_error("Index::insert <- Key already exists!");
+            throw std::runtime_error("index::insert <- Key already exists!");
         }
 
         size_t node_level = random_level();
@@ -319,7 +320,8 @@ private:
         std::transform(new_links.begin(), new_links.end(),
                        transformed_links.begin(),
                        [](const SearchResult& entry) {return entry.ToPair();});
-        out_edges.assign_ordered_unique(transformed_links.begin(), transformed_links.end());
+        out_edges.clear();
+        out_edges.insert(transformed_links.begin(), transformed_links.end());
 
         for (const auto &entry: new_links) {
             nodes[entry.key].layers[layer].in_edges.insert(node);
