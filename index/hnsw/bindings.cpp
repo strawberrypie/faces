@@ -22,7 +22,6 @@ public:
         size_t rows = buffer.shape[0];
         size_t features = buffer.shape[1];
 
-        std::vector<KeyType> ids;
         py::array_t<KeyType, py::array::c_style | py::array::forcecast> keys(_keys);
 
         size_t keys_count = keys.request().shape[0];
