@@ -33,6 +33,9 @@ ANNOY_TREES_COUNT = 10
 BATCH_SIZE = 100
 IMG_SIZE = 160
 
+def get_filename_wo_ext(path):
+        return os.path.basename(os.path.splitext(path)[0])
+
 def resize_img(source_path, target_folder):
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -79,13 +82,18 @@ def aligned_imgs(source_folder, target_folder, is_debug=False):
     for img_path in tqdm(img_paths):
         align_image(img_path, target_folder)
 
-def get_img_paths(raw_imgs_path):
+def get_img_paths(raw_imgs_path, avail_filenames=None):
     paths = []
     for dirpath, dnames, fnames in os.walk(raw_imgs_path):
         for fname in fnames:
             if fname.startswith('.'):
                 continue
-            paths.append(os.path.join(dirpath, fname))
+            if (avail_filenames is None) or (os.path.splitext(fname)[0] in avail_filenames):
+                paths.append(os.path.join(dirpath, fname))
+    paths = sorted(paths)
+    if avail_filenames is not None:
+        for i, path in enumerate(paths):
+            logging.debug('raw img mapping: {}: {}'.format(i, path))
     return paths
 
 def get_index(aligned_user_img_path, trained_model_path):
@@ -122,7 +130,7 @@ def create_annoy_index(tmp_dir, embeddings, is_debug):
     annoy_index.save(os.path.join(tmp_dir, annoy_filename))
     logging.info('saved annoy index: {}'.format(os.path.join(tmp_dir, annoy_filename)))
 
-def get_best_matches_idxs(tmp_dir, user_img_index, is_debug, count=1):
+def get_best_matches_idxs(tmp_dir, user_img_index, is_debug, count=3):
     annoy_index = AnnoyIndex(ANNOY_SIZE)
     annoy_filepath = os.path.join(tmp_dir, ANNOY_FILE)
     if is_debug:
@@ -144,6 +152,7 @@ def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug):
     aligned_imgs_paths = get_img_paths(aligned_imgs_path)
     if is_debug:
         aligned_imgs_paths = aligned_imgs_paths[:DEBUG_COUNT]
+    img_idxs = [get_filename_wo_ext(x) for x in aligned_imgs_paths]
 
     with tf.Graph().as_default():
         with tf.Session() as sess:
@@ -167,19 +176,23 @@ def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug):
                 emb_array[start_index:end_index,:] = sess.run(embeddings, feed_dict=feed_dict)
             
             with open(embeddings_path, 'wb') as f:
-                pickle.dump(emb_array, f)
+                pickle.dump((emb_array, img_idxs), f)
             logging.info('saved embeddings: {}'.format(embeddings_path))
-            return emb_array
+
+            for i in range(len(emb_array)):
+                logging.debug('embedding: {}: {}'.format(i, aligned_imgs_paths[i]))
+
+            return emb_array, img_idxs
 
 def show_imgs(user_img_path, best_matches_img_paths):
     fig = plt.figure()
-    a = fig.add_subplot(len(best_matches_img_paths) + 1, 1, 1)
+    a = fig.add_subplot(1, len(best_matches_img_paths) + 1, 1)
     # show user image
     img = mpimg.imread(user_img_path)
     imgplot = plt.imshow(img)
     # show best matches
     for i in range(2, len(best_matches_img_paths) + 2):
-        a = fig.add_subplot(len(best_matches_img_paths) + 1, 1, i)
+        a = fig.add_subplot(1, len(best_matches_img_paths) + 1, i)
         img = mpimg.imread(best_matches_img_paths[i-2])
         imgplot = plt.imshow(img)
     plt.show()
@@ -189,23 +202,24 @@ def show_sim_celebrities(aligned_imgs_path, raw_imgs_path, trained_model_path,
     # init
     if not annoy_index_exists(tmp_dir, is_debug):
         logging.info('creating annoy index')
-        embeddings = get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug)
+        embeddings, img_idxs = get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug)
         create_annoy_index(tmp_dir, embeddings, is_debug)
     else:
         logging.info('annoy index exists')
-    raw_img_paths = get_img_paths(raw_imgs_path)
-    if is_debug:
-        raw_img_paths = raw_img_paths[:DEBUG_COUNT]
+
+    available_indexes = set(img_idxs)
+    raw_img_paths = get_img_paths(raw_imgs_path, available_indexes)
 
     # main pipeline:
     align_user_img_path = align_image(user_img_path, tmp_dir)
     user_img_index = get_index(align_user_img_path, trained_model_path)
     best_matches_idxs = get_best_matches_idxs(tmp_dir, user_img_index, is_debug)
+    logging.debug('best_matches idxs: {}'.format(best_matches_idxs))
     best_matches_img_paths = np.array(raw_img_paths)[best_matches_idxs]
+    logging.info('best_matches_img_paths: {}'.format(best_matches_img_paths))
     show_imgs(user_img_path, best_matches_img_paths)
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--resize_imgs', action='store_true')
