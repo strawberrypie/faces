@@ -21,6 +21,8 @@ from PIL import Image
 import cv2
 from tqdm import tqdm
 import logging
+import nmslib
+from hnsw_index import HNSWIndex
 
 logging.basicConfig(level=logging.INFO)
 
@@ -28,7 +30,9 @@ DEBUG_COUNT = 500
 DEBUG_EXT = '.debug'
 EMBEDDINGS_FILE = 'embeddings.pickle'
 ANNOY_FILE = 'index.ann'
+NMS_FILE = 'index.nms'
 ANNOY_SIZE = 128
+HNSW_SIZE = 128
 ANNOY_TREES_COUNT = 10
 BATCH_SIZE = 100
 IMG_SIZE = 160
@@ -111,12 +115,19 @@ def get_index(aligned_user_img_path, trained_model_path):
             embeddings_arr = sess.run(embeddings, feed_dict=feed_dict)
     return embeddings_arr[0]
 
-def annoy_index_exists(tmp_dir, is_debug):
+def index_exists(tmp_dir, index_label, is_debug):
     assert(os.path.isdir(tmp_dir))
-    annoy_filename = ANNOY_FILE
+    if index_label == 'annoy':
+        index_filename = ANNOY_FILE
+    elif index_label == 'nms':
+        index_filename = NMS_FILE
+    elif index_label == 'hnsw':
+        return False
+    else:
+        raise NotImlemented('not implemented index')
     if is_debug:
-        annoy_filename += DEBUG_EXT
-    return os.path.isfile(os.path.join(tmp_dir, annoy_filename))
+        index_filename += DEBUG_EXT
+    return os.path.isfile(os.path.join(tmp_dir, index_filename))
 
 def create_annoy_index(tmp_dir, embeddings, is_debug):
     annoy_index = AnnoyIndex(ANNOY_SIZE)
@@ -130,7 +141,37 @@ def create_annoy_index(tmp_dir, embeddings, is_debug):
     annoy_index.save(os.path.join(tmp_dir, annoy_filename))
     logging.info('saved annoy index: {}'.format(os.path.join(tmp_dir, annoy_filename)))
 
-def get_best_matches_idxs(tmp_dir, user_img_index, is_debug, count=3):
+def create_nms_index(tmp_dir, embeddings, is_debug):
+    nms_filename = NMS_FILE
+    if is_debug:
+        embeddings = embeddings[:DEBUG_COUNT]
+        nms_filename += DEBUG_EXT
+    nms_index = nmslib.init(method='hnsw', space='cosinesimil')
+    nms_index.addDataPointBatch(np.array(embeddings))
+    nms_index.createIndex({'post': 2}, print_progress=True)
+    nms_index.saveIndex(os.path.join(tmp_dir, nms_filename))
+    logging.info('saved nms index: {}'.format(os.path.join(tmp_dir, nms_filename)))
+
+hnsw_index = None
+
+def create_hnsw_index(tmp_dir, embeddings, is_debug):
+    global hnsw_index
+    hnsw_index = HNSWIndex(HNSW_SIZE)
+    if is_debug:
+        embeddings = embeddings[:DEBUG_COUNT]
+    hnsw_index.add_items(np.array(embeddings), np.arange(len(embeddings)))
+
+def create_index(tmp_dir, embeddings, index_label, is_debug):
+    if index_label == 'annoy':
+        create_annoy_index(tmp_dir, embeddings, is_debug)
+    elif index_label == 'nms':
+        create_nms_index(tmp_dir, embeddings, is_debug)
+    elif index_label == 'hnsw':
+        create_hnsw_index(tmp_dir, embeddings, is_debug)
+    else:
+        raise NotImlemented('not implemented index')
+
+def get_best_matches_annoy_idxs(tmp_dir, user_img_index, is_debug, count=3):
     annoy_index = AnnoyIndex(ANNOY_SIZE)
     annoy_filepath = os.path.join(tmp_dir, ANNOY_FILE)
     if is_debug:
@@ -138,6 +179,28 @@ def get_best_matches_idxs(tmp_dir, user_img_index, is_debug, count=3):
     annoy_index.load(annoy_filepath)
     best_matches_idxs = annoy_index.get_nns_by_vector(user_img_index, count)
     return best_matches_idxs
+
+def get_best_matches_nms_idxs(tmp_dir, user_img_index, is_debug, count=3):
+    nms_index_filepath = os.path.join(tmp_dir, NMS_FILE)
+    if is_debug:
+        nms_index_filepath += DEBUG_EXT
+    nms_index = nmslib.init(method='hnsw', space='cosinesimil')
+    nms_index.loadIndex(nms_index_filepath)
+    best_matches_idxs, distances = nms_index.knnQuery(np.array(user_img_index), k=count)
+    return best_matches_idxs
+
+def get_best_matches_hnsw_idxs(tmp_dir, user_img_index, is_debug, count=3):
+    best_matches_idxs, distances = hnsw_index.knn_query(np.array([user_img_index]), k=count)
+    return best_matches_idxs[0]
+
+def get_best_matches_idxs(tmp_dir, user_img_index, index_label, is_debug, count=3):
+    if index_label == 'annoy':
+        return get_best_matches_annoy_idxs(tmp_dir, user_img_index, is_debug, count)
+    elif index_label == 'nms':
+        return get_best_matches_nms_idxs(tmp_dir, user_img_index, is_debug, count)
+    elif index_label == 'hnsw':
+        return get_best_matches_hnsw_idxs(tmp_dir, user_img_index, is_debug, count)
+    raise NotImlemented('not implemented index') 
 
 def get_aligned_img_idxs(aligned_imgs_path, is_debug):
     aligned_imgs_paths = get_img_paths(aligned_imgs_path)
@@ -156,7 +219,10 @@ def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug):
         with open(embeddings_path, 'rb') as f:
             return pickle.load(f)
 
-    img_idxs = get_aligned_img_idxs(aligned_imgs_path, is_debug)
+    aligned_imgs_paths = get_img_paths(aligned_imgs_path)
+    if is_debug:
+        aligned_imgs_paths = aligned_imgs_paths[:DEBUG_COUNT]
+    img_idxs = [get_filename_wo_ext(x) for x in aligned_imgs_paths]
 
     with tf.Graph().as_default():
         with tf.Session() as sess:
@@ -202,14 +268,14 @@ def show_imgs(user_img_path, best_matches_img_paths):
     plt.show()
 
 def show_sim_celebrities(aligned_imgs_path, raw_imgs_path, trained_model_path,
-                         user_img_path, tmp_dir, is_debug):
+                         user_img_path, tmp_dir, is_debug, index_label):
     # init
-    if not annoy_index_exists(tmp_dir, is_debug):
-        logging.info('creating annoy index')
+    if not index_exists(tmp_dir, index_label, is_debug):
+        logging.info('creating index')
         embeddings, img_idxs = get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug)
-        create_annoy_index(tmp_dir, embeddings, is_debug)
+        create_index(tmp_dir, embeddings, index_label, is_debug)
     else:
-        logging.info('annoy index exists')
+        logging.info('index exists')
         img_idxs = get_aligned_img_idxs(aligned_imgs_path, is_debug)
 
     available_indexes = set(img_idxs)
@@ -218,7 +284,7 @@ def show_sim_celebrities(aligned_imgs_path, raw_imgs_path, trained_model_path,
     # main pipeline:
     align_user_img_path = align_image(user_img_path, tmp_dir)
     user_img_index = get_index(align_user_img_path, trained_model_path)
-    best_matches_idxs = get_best_matches_idxs(tmp_dir, user_img_index, is_debug)
+    best_matches_idxs = get_best_matches_idxs(tmp_dir, user_img_index, index_label, is_debug)
     logging.debug('best_matches idxs: {}'.format(best_matches_idxs))
     best_matches_img_paths = np.array(raw_img_paths)[best_matches_idxs]
     logging.info('best_matches_img_paths: {}'.format(best_matches_img_paths))
@@ -237,13 +303,14 @@ if __name__ == '__main__':
     parser.add_argument('--trained_model_path', type=str, help='path to pretrained model')
     parser.add_argument('--user_img_path', type=str, help='path to raw img to estimate')
     parser.add_argument('--worker_dir', type=str, help='dir for tmp files', default='~/tmp')
+    parser.add_argument('--index_label', type=str, help='index label, available: annoy/nms/hnsw', default='annoy')
     args = parser.parse_args()
 
     if args.resize_imgs:
         aligned_imgs(args.source_folder, args.target_folder, args.debug)
     else:
         show_sim_celebrities(args.aligned_imgs_path, args.raw_imgs_path, args.trained_model_path,
-                args.user_img_path, args.worker_dir, args.debug)
+                args.user_img_path, args.worker_dir, args.debug, args.index_label)
 
 # python find_sim_celebrities_debug.py --resize_imgs --source_folder=../aligned/aligned --target_folder=../aligned_sized --debug
-# python find_sim_celebrities_debug.py --aligned_imgs_path=../aligned_sized --raw_imgs_path=../raw/raw --trained_model_path=../pretrained_model --user_img_path=../user_imgs/Angelina-Jolie.jpg --worker_dir=../tmp --debug
+# python find_sim_celebrities_debug.py --aligned_imgs_path=../aligned_sized --raw_imgs_path=../raw/raw --trained_model_path=../pretrained_model --user_img_path=../user_imgs/Angelina-Jolie.jpg --worker_dir=../tmp --debug --index_label
