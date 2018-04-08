@@ -19,7 +19,13 @@ import matplotlib.image as mpimg
 from annoy import AnnoyIndex
 from PIL import Image
 import cv2
+from tqdm import tqdm
+import logging
 
+logging.basicConfig(level=logging.INFO)
+
+DEBUG_COUNT = 500
+DEBUG_EXT = '.debug'
 EMBEDDINGS_FILE = 'embeddings.pickle'
 ANNOY_FILE = 'index.ann'
 ANNOY_SIZE = 128
@@ -36,9 +42,11 @@ def resize_img(source_path, target_folder):
     resized_img = img.resize((IMG_SIZE, IMG_SIZE), Image.ANTIALIAS)
     resized_img.save(os.path.join(target_folder, img_name))
 
-def resize_imgs(source_folder, target_folder):
+def resize_imgs(source_folder, target_folder, is_debug=False):
     img_paths = get_img_paths(source_folder)
-    for img_path in img_paths:
+    if is_debug:
+        img_paths = img_paths[:DEBUG_COUNT]
+    for img_path in tqdm(img_paths):
         resize_img(img_path, target_folder)
 
 def align_image(user_img_path, target_folder):
@@ -46,22 +54,30 @@ def align_image(user_img_path, target_folder):
         os.makedirs(target_folder)
     _, img_name = os.path.split(user_img_path)
     aligned_img_path = os.path.join(target_folder, img_name)
+    aligned_img_path = aligned_img_path[:-3]+ 'png'
 
-    path_to_xml = '/Users/romanmarakulin/anaconda3/lib/python3.6/site-packages/cv2/data'
+    path_to_xml = os.path.join(cv2.__path__[0], 'data')
     face_cascade = cv2.CascadeClassifier(os.path.join(path_to_xml, 'haarcascade_frontalface_default.xml'))
     eye_cascade = cv2.CascadeClassifier(os.path.join(path_to_xml, 'haarcascade_eye.xml'))
     img = cv2.imread(user_img_path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    if faces:
+    if len(faces) > 0:
         x, y, w, h = faces[0]
         crop_img = img[y:y+h, x:x+w]
         crop_img = cv2.resize(crop_img, (IMG_SIZE, IMG_SIZE))
 
-        cv2.imwrite(aligned_img_path[:-3]+'png', crop_img)
+        cv2.imwrite(aligned_img_path, crop_img)
         return aligned_img_path
     return None
+
+def aligned_imgs(source_folder, target_folder, is_debug=False):
+    img_paths = get_img_paths(source_folder)
+    if is_debug:
+        img_paths = img_paths[:DEBUG_COUNT]
+    for img_path in tqdm(img_paths):
+        align_image(img_path, target_folder)
 
 def get_img_paths(raw_imgs_path):
     paths = []
@@ -72,7 +88,7 @@ def get_img_paths(raw_imgs_path):
             paths.append(os.path.join(dirpath, fname))
     return paths
 
-def get_index(align_user_img_path, trained_model_path):
+def get_index(aligned_user_img_path, trained_model_path):
     embeddings_arr = None
     with tf.Graph().as_default():
         with tf.Session() as sess:
@@ -82,36 +98,52 @@ def get_index(align_user_img_path, trained_model_path):
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
             embedding_size = embeddings.get_shape()[1]
 
-            images = facenet.load_data([img_path], False, False, IMG_SIZE)
+            images = facenet.load_data([aligned_user_img_path], False, False, IMG_SIZE)
             feed_dict = {images_placeholder: images, phase_train_placeholder: False}
             embeddings_arr = sess.run(embeddings, feed_dict=feed_dict)
     return embeddings_arr[0]
 
-def annoy_index_exists(tmp_dir):
+def annoy_index_exists(tmp_dir, is_debug):
     assert(os.path.isdir(tmp_dir))
-    return os.path.isfile(os.path.join(tmp_dir, ANNOY_FILE))
+    annoy_filename = ANNOY_FILE
+    if is_debug:
+        annoy_filename += DEBUG_EXT
+    return os.path.isfile(os.path.join(tmp_dir, annoy_filename))
 
-def create_annoy_index(tmp_dir, embeddings):
+def create_annoy_index(tmp_dir, embeddings, is_debug):
     annoy_index = AnnoyIndex(ANNOY_SIZE)
+    annoy_filename = ANNOY_FILE
+    if is_debug:
+        embeddings = embeddings[:DEBUG_COUNT]
+        annoy_filename += DEBUG_EXT
     for i, embedding in enumerate(embeddings):
         annoy_index.add_item(i, embedding)
     annoy_index.build(ANNOY_TREES_COUNT)
-    annoy_index.save(os.path.join(tmp_dir, ANNOY_FILE))
+    annoy_index.save(os.path.join(tmp_dir, annoy_filename))
+    logging.info('saved annoy index: {}'.format(os.path.join(tmp_dir, annoy_filename)))
 
-def get_best_matches_idxs(tmp_dir, user_img_index, count=1):
+def get_best_matches_idxs(tmp_dir, user_img_index, is_debug, count=1):
     annoy_index = AnnoyIndex(ANNOY_SIZE)
-    annoy_index.load(os.path.join(tmp_dir, ANNOY_FILE))
+    annoy_filepath = os.path.join(tmp_dir, ANNOY_FILE)
+    if is_debug:
+        annoy_filepath += DEBUG_EXT
+    annoy_index.load(annoy_filepath)
     best_matches_idxs = annoy_index.get_nns_by_vector(user_img_index, count)
     return best_matches_idxs
 
-def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir):
+def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug):
     assert(os.path.isdir(tmp_dir))
-    embeddings_path = os.path.join(tmp_dir, EMBEDDINGS_FILE)
+    embeddings_filename = EMBEDDINGS_FILE
+    if is_debug:
+        embeddings_filename += DEBUG_EXT
+    embeddings_path = os.path.join(tmp_dir, embeddings_filename)
     if os.path.isfile(embeddings_path):
         with open(embeddings_path, 'rb') as f:
             return pickle.load(f)
 
     aligned_imgs_paths = get_img_paths(aligned_imgs_path)
+    if is_debug:
+        aligned_imgs_paths = aligned_imgs_paths[:DEBUG_COUNT]
 
     with tf.Graph().as_default():
         with tf.Session() as sess:
@@ -136,6 +168,7 @@ def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir):
             
             with open(embeddings_path, 'wb') as f:
                 pickle.dump(emb_array, f)
+            logging.info('saved embeddings: {}'.format(embeddings_path))
             return emb_array
 
 def show_imgs(user_img_path, best_matches_img_paths):
@@ -151,32 +184,47 @@ def show_imgs(user_img_path, best_matches_img_paths):
         imgplot = plt.imshow(img)
     plt.show()
 
-def show_sim_celebrities(aligned_imgs_path, raw_imgs_path, trained_model_path, user_img_path, tmp_dir):
+def show_sim_celebrities(aligned_imgs_path, raw_imgs_path, trained_model_path,
+                         user_img_path, tmp_dir, is_debug):
     # init
-    if not annoy_index_exists(tmp_dir):
-        embeddings = get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir)
-        create_annoy_index(tmp_dir, embeddings)
+    if not annoy_index_exists(tmp_dir, is_debug):
+        logging.info('creating annoy index')
+        embeddings = get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug)
+        create_annoy_index(tmp_dir, embeddings, is_debug)
+    else:
+        logging.info('annoy index exists')
     raw_img_paths = get_img_paths(raw_imgs_path)
+    if is_debug:
+        raw_img_paths = raw_img_paths[:DEBUG_COUNT]
 
     # main pipeline:
     align_user_img_path = align_image(user_img_path, tmp_dir)
     user_img_index = get_index(align_user_img_path, trained_model_path)
-    best_matches_idxs = get_best_matches_idxs(tmp_dir, user_img_index)
-    best_matches_img_paths = raw_img_paths[best_matches_idxs]
+    best_matches_idxs = get_best_matches_idxs(tmp_dir, user_img_index, is_debug)
+    best_matches_img_paths = np.array(raw_img_paths)[best_matches_idxs]
     show_imgs(user_img_path, best_matches_img_paths)
 
 if __name__ == '__main__':
-    test_samples()
-    sys.exit(0)
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--resize_imgs', action='store_true')
+    parser.add_argument('--source_folder', type=str, help='path to aligned celebrities imgs')
+    parser.add_argument('--target_folder', type=str, help='path to aligned resized celebrities imgs')
     # need for generating indexes. Not needed when model wouldn't change
     parser.add_argument('--aligned_imgs_path', type=str, help='path to aligned celebrities imgs')
     parser.add_argument('--raw_imgs_path', type=str, help='path to celebrities imgs')
+    # get from https://github.com/davidsandberg/facenet
     parser.add_argument('--trained_model_path', type=str, help='path to pretrained model')
     parser.add_argument('--user_img_path', type=str, help='path to raw img to estimate')
     parser.add_argument('--worker_dir', type=str, help='dir for tmp files', default='~/tmp')
     args = parser.parse_args()
 
-    show_sim_celebrities(args.aligned_imgs_path, args.raw_imgs_path, args.trained_model_path,
-            args.user_img_path, args.worker_dir)
+    if args.resize_imgs:
+        aligned_imgs(args.source_folder, args.target_folder, args.debug)
+    else:
+        show_sim_celebrities(args.aligned_imgs_path, args.raw_imgs_path, args.trained_model_path,
+                args.user_img_path, args.worker_dir, args.debug)
+
+# python find_sim_celebrities_debug.py --resize_imgs --source_folder=../aligned/aligned --target_folder=../aligned_sized --debug
+# python find_sim_celebrities_debug.py --aligned_imgs_path=../aligned_sized --raw_imgs_path=../raw/raw --trained_model_path=../pretrained_model --user_img_path=../user_imgs/Angelina-Jolie.jpg --worker_dir=../tmp --debug
