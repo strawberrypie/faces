@@ -139,6 +139,13 @@ def get_best_matches_idxs(tmp_dir, user_img_index, is_debug, count=3):
     best_matches_idxs = annoy_index.get_nns_by_vector(user_img_index, count)
     return best_matches_idxs
 
+def get_aligned_img_idxs(aligned_imgs_path, is_debug):
+    aligned_imgs_paths = get_img_paths(aligned_imgs_path)
+    if is_debug:
+        aligned_imgs_paths = aligned_imgs_paths[:DEBUG_COUNT]
+    img_idxs = [get_filename_wo_ext(x) for x in aligned_imgs_paths]
+    return img_idxs
+
 def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug):
     assert(os.path.isdir(tmp_dir))
     embeddings_filename = EMBEDDINGS_FILE
@@ -149,10 +156,7 @@ def get_embeddings(aligned_imgs_path, trained_model_path, tmp_dir, is_debug):
         with open(embeddings_path, 'rb') as f:
             return pickle.load(f)
 
-    aligned_imgs_paths = get_img_paths(aligned_imgs_path)
-    if is_debug:
-        aligned_imgs_paths = aligned_imgs_paths[:DEBUG_COUNT]
-    img_idxs = [get_filename_wo_ext(x) for x in aligned_imgs_paths]
+    img_idxs = get_aligned_img_idxs(aligned_imgs_path, is_debug)
 
     with tf.Graph().as_default():
         with tf.Session() as sess:
@@ -206,6 +210,7 @@ def show_sim_celebrities(aligned_imgs_path, raw_imgs_path, trained_model_path,
         create_annoy_index(tmp_dir, embeddings, is_debug)
     else:
         logging.info('annoy index exists')
+        img_idxs = get_aligned_img_idxs(aligned_imgs_path, is_debug)
 
     available_indexes = set(img_idxs)
     raw_img_paths = get_img_paths(raw_imgs_path, available_indexes)
