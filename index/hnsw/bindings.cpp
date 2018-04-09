@@ -15,7 +15,7 @@ class HNSWIndex {
 public:
     HNSWIndex(const size_t dim) : dim(dim), index() {}
 
-    void addItems(py::object _vectors, py::object _keys) {
+    void add_items(py::object _vectors, py::object _keys) {
         py::array_t<float, py::array::c_style | py::array::forcecast> vectors(_vectors);
         auto buffer = vectors.request();
 
@@ -42,7 +42,7 @@ public:
         }
     }
 
-    py::object knnQuery_return_numpy(py::object _vectors, size_t k = 1) {
+    py::object knn_query_return_numpy(py::object _vectors, size_t k = 1) {
 
         py::array_t<float, py::array::c_style | py::array::forcecast> vectors(_vectors);
         auto buffer = vectors.request();
@@ -77,6 +77,14 @@ public:
                 );
     }
 
+    void save_index(const std::string &file_path) {
+        index.save_index(file_path);
+    }
+
+    void load_index(const std::string &file_path) {
+        index.load_index(file_path);
+    }
+
     IndexType index;
     size_t dim;
 };
@@ -88,8 +96,10 @@ PYBIND11_PLUGIN(hnsw_index) {
 
     py::class_<BridgeType>(m, "HNSWIndex")
             .def(py::init<const int>(), py::arg("dim"))
-            .def("knn_query", &BridgeType::knnQuery_return_numpy, py::arg("data"), py::arg("k")=1)
-            .def("add_items", &BridgeType::addItems, py::arg("data"), py::arg("ids"))
+            .def("knn_query", &BridgeType::knn_query_return_numpy, py::arg("data"), py::arg("k") = 1)
+            .def("add_items", &BridgeType::add_items, py::arg("data"), py::arg("ids"))
+            .def("save_index", &BridgeType::save_index, py::arg("file_path"))
+            .def("load_index", &BridgeType::load_index, py::arg("file_path"))
             .def("__repr__",
                  [](const BridgeType &a) {
                      return "<HNSW-lib index>";

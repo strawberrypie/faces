@@ -1,7 +1,4 @@
-
-
 namespace hnsw {
-
 namespace util {
 
 struct ClosestResultComparator {
@@ -28,5 +25,4 @@ public:
 };
 
 }
-
 }

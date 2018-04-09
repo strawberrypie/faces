@@ -1,16 +1,25 @@
 #include <algorithm>
 #include <random>
 #include <iostream>
+#include <fstream>
 #include <map>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <queue>
-#include <boost/container/flat_map.hpp>
+
+#include <cereal/archives/binary.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/map.hpp>
+#include <cereal/types/set.hpp>
+#include <cereal/types/vector.hpp>
+#include <cereal/types/complex.hpp>
+#include <cereal/types/unordered_set.hpp>
+
+
 #include "distance.hpp"
 #include "util.hpp"
 
-using boost::container::flat_map;
 
 namespace hnsw {
 
@@ -51,17 +60,33 @@ public:
 private:
     struct Node {
         /* Contains links between keys in the Hierarchical Navigable Small World graph. */
-        using OutEdges = flat_map<Key, Scalar>;
+        using OutEdges = std::unordered_map<Key, Scalar>;
         using InEdges = std::set<Key>;
 
         struct LayeredEdges {
             /* Contains connections to nodes on the same layer. */
             OutEdges out_edges;
             InEdges in_edges;
+
+        private:
+            friend class cereal::access;
+
+            template<class Archive>
+            void serialize(Archive &ar) {
+                ar(out_edges, in_edges);
+            }
         };
 
         Vector vector;
         std::vector<LayeredEdges> layers;
+
+    private:
+        friend class cereal::access;
+
+        template<class Archive>
+        void serialize(Archive &ar) {
+            ar(vector, layers);
+        }
     };
 
     std::unordered_map<Key, Node> nodes;
@@ -75,6 +100,12 @@ private:
             std::vector<SearchResult>, std::less<>
     >;
 
+    friend class cereal::access;
+
+    template<class Archive>
+    void serialize(Archive &ar) {
+        ar(nodes, levels);
+    }
 public:
     void insert(const Key &key, const Vector &vector) {
         insert(key, Vector(vector));
@@ -159,6 +190,24 @@ public:
             results_vector[i] = {results.values[i].key, results.values[i].distance};
         }
         return results_vector;
+    }
+
+
+    void save_index(const std::string &path) {
+        std::ofstream out_file(path, std::ios::binary);
+        {
+            cereal::BinaryOutputArchive archive(out_file);
+            archive(*this);
+        }
+    }
+
+
+    void load_index(const std::string &path) {
+        std::ifstream in_file(path);
+        {
+            cereal::BinaryInputArchive archive(in_file);
+            archive(*this);
+        }
     }
 
 private:
@@ -266,6 +315,7 @@ private:
         return result;
     }
 
+
     void connect(const Key &node_from, const Key &node_to, Scalar link_distance, size_t layer) {
         /* Creates a bidirectional link between node_from and node_to. */
         auto &out_edges = nodes[node_from].layers[layer].out_edges;
@@ -327,13 +377,13 @@ private:
             nodes[entry.key].layers[layer].in_edges.insert(node);
         }
     }
-
 };
 
 }
 
 int main() {
     auto index = hnsw::Index<u_int32_t, std::vector<float>, hnsw::CosineDistance>();
+//    index.load_index("/Users/anton/CLionProjects/HNSW_Index/index.bin");
 
     for (u_int32_t i = 0; i < 10; ++i) {
         auto key = i;
@@ -351,5 +401,7 @@ int main() {
     for (const auto& result : query) {
         std::cout << result.key << " " << result.distance << std::endl;
     }
+
+//    index.save_index("/Users/anton/CLionProjects/HNSW_Index/index.bin");
     return 0;
 }
