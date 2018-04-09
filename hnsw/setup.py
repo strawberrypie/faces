@@ -1,8 +1,8 @@
-import os
+import sys
+
+import setuptools
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
-import sys
-import setuptools
 
 __version__ = '0.2'
 
@@ -58,7 +58,7 @@ class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""
     c_opts = {
         'msvc': ['/EHsc', '/openmp', '/O2'],
-        'unix': ['-O3', '-march=native'],  # , '-w'
+        'unix': ['-O3', '-march=native', '-I../include'],  # , '-w'
     }
     link_opts = {
         'unix': [],
