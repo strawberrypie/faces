@@ -1,0 +1,10 @@
+version: '3'
+services:
+  # find_index_server:
+  #   build: find_index_server
+  #   ports:
+  #    - "8080:8080"
+  image_waiter_server:
+    build: image_waiter_server
+    ports:
+    - "8081:8081"
