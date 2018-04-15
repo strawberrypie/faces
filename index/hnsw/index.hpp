@@ -107,6 +107,82 @@ private:
         ar(nodes, levels);
     }
 public:
+    // Check whether the index satisfies its invariants.
+    bool check() const {
+        if (nodes.empty()) {
+            return levels.empty();
+        }
+
+        for (const auto &node: nodes) {
+            auto level_it = levels.find(node.second.layers.size());
+
+            if (level_it == levels.end()) {
+                return false;
+            }
+
+            if (level_it->second.count(node.first) == 0) {
+                return false;
+            }
+
+            for (size_t layer = 0; layer < node.second.layers.size(); ++layer) {
+                const auto &links = node.second.layers[layer].out_edges;
+
+                // Self-links are not allowed.
+                if (links.count(node.first) > 0) {
+                    return false;
+                }
+
+                for (const auto &link: links) {
+                    auto peer_node_it = nodes.find(link.first);
+
+                    if (peer_node_it == nodes.end()) {
+                        return false;
+                    }
+
+                    if (layer >= peer_node_it->second.layers.size()) {
+                        return false;
+                    }
+
+                    if (peer_node_it->second.layers.at(layer).in_edges.count(node.first) == 0) {
+                        return false;
+                    }
+                }
+
+                for (const auto &link: node.second.layers[layer].in_edges) {
+                    auto peer_node_it = nodes.find(link);
+
+                    if (peer_node_it == nodes.end()) {
+                        return false;
+                    }
+
+                    if (layer >= peer_node_it->second.layers.size()) {
+                        return false;
+                    }
+
+                    if (peer_node_it->second.layers.at(layer).out_edges.count(node.first) == 0) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        for (const auto &level: levels) {
+            for (const auto &key: level.second) {
+                auto node_it = nodes.find(key);
+
+                if (node_it == nodes.end()) {
+                    return false;
+                }
+
+                if (level.first != node_it->second.layers.size()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     void insert(const Key &key, const Vector &vector) {
         insert(key, Vector(vector));
     }
@@ -379,29 +455,4 @@ private:
     }
 };
 
-}
-
-int main() {
-    auto index = hnsw::Index<u_int32_t, std::vector<float>, hnsw::CosineDistance>();
-//    index.load_index("/Users/anton/CLionProjects/HNSW_Index/index.bin");
-
-    for (u_int32_t i = 0; i < 10; ++i) {
-        auto key = i;
-        auto vector = std::vector<float> {
-            float(i), float(i % 3), 0
-        };
-        index.insert(key, vector);
-    }
-    auto vector_to_search = std::vector<float> {
-            0, 2, 0
-    };
-    auto query = index.search(vector_to_search, 5);
-
-
-    for (const auto& result : query) {
-        std::cout << result.key << " " << result.distance << std::endl;
-    }
-
-//    index.save_index("/Users/anton/CLionProjects/HNSW_Index/index.bin");
-    return 0;
 }
