@@ -19,7 +19,7 @@ T l2_square_distance(const T *left, const T *right, size_t dim) {
 }
 
 template<typename T>
-T cosine_distance(const T *left, const T *right, size_t dim) {
+T cosine_similarity(const T *left, const T *right, size_t dim) {
     T sum = 0;
     T sum_left = 0;
     T sum_right = 0;
@@ -39,7 +39,7 @@ T cosine_distance(const T *left, const T *right, size_t dim) {
         }
     }
 
-    return std::max(T(-1.0), std::min(T(1.0), sum / (std::sqrt(sum_left) * std::sqrt(sum_right))));
+    return 1.0f - std::max(T(-1.0), std::min(T(1.0), sum / (std::sqrt(sum_left) * std::sqrt(sum_right))));
 }
 
 }
@@ -56,7 +56,7 @@ struct L2SquareDistance {
     }
 };
 
-struct CosineDistance {
+struct CosineSimilarity {
 
     template<typename Vector>
     auto operator()(const Vector &one, const Vector &another) const {
@@ -64,7 +64,7 @@ struct CosineDistance {
             throw std::runtime_error("CosineDistance: vectors sizes do not match");
         }
 
-        return impl::cosine_distance(one.data(), another.data(), one.size());
+        return impl::cosine_similarity(one.data(), another.data(), one.size());
     }
 };
 

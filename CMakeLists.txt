@@ -7,7 +7,7 @@ set(CMAKE_CXX_FLAGS "-std=c++17 -O0 -fopenmp")
 include_directories(PYTHON_INCLUDE_DIR)
 include_directories(./include)
 
-add_executable(index hnsw/index.cpp)
+add_executable(tests hnsw/tests.cpp)
 
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
@@ -24,5 +24,5 @@ if(Boost_FOUND)
     message(STATUS "Boost version found is ${Boost_VERSION}")
 
     include_directories(${Boost_INCLUDE_DIRS})
-    target_link_libraries(index ${Boost_LIBRARIES})
+    target_link_libraries(tests ${Boost_LIBRARIES})
 endif()

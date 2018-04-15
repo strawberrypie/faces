@@ -1,13 +1,13 @@
 #include <iostream>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include "index.cpp"
+#include "index.hpp"
 
 namespace py = pybind11;
 
 using KeyType = int64_t;
 using VectorType = std::vector<float>;
-using DistanceType = hnsw::CosineDistance;
+using DistanceType = hnsw::CosineSimilarity;
 using IndexType = hnsw::Index<KeyType, VectorType, DistanceType>;
 
 
