@@ -1,16 +1,18 @@
-FROM python:3-alpine
+FROM tensorflow/tensorflow
 
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 
 COPY requirements.txt /usr/src/app/
 
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
 
 COPY . /usr/src/app
 
-EXPOSE 8080
+EXPOSE 8081
 
-ENTRYPOINT ["python3"]
+ENV CUDA_VISIBLE_DEVICES ""
 
-CMD ["-m", "swagger_server"]
+ENTRYPOINT ["python"]
+CMD ["-m", "image_waiter_server"]
