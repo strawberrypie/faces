@@ -5,21 +5,24 @@ import time
 import json
 import random
 import numpy as np
+from requests.exceptions import ConnectionError
 
 logging.basicConfig(level=logging.INFO)
 
 class IndexRequester(object):
-    def __init__(self, url='http://localhost', port=8080, retry_count=3, resend_timeout=3):
-        self._uri = os.path.join(url + ':' + str(8080))
+    def __init__(self, url='http://0.0.0.0', port=8080, retry_count=3, resend_timeout=3):
+        self._uri = os.path.join(url + ':' + str(port))
         self._best_matches_path = 'best_matches'
         self._retry_count = retry_count
         self._resend_timeout = resend_timeout
 
     def make_single_post_request(self, method_name, payload):
         url = os.path.join(self._uri, method_name)
+        logging.info('request to url: {}'.format(url))
         try:
             r = requests.post(url, json=payload)
-        except ConnectionError:
+        except ConnectionError as e:
+            logging.error('gor: {}'.format(e))
             return None, 500
         if r.status_code == 200:
             return r.json(), r.status_code
