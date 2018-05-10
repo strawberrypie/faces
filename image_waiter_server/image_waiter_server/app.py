@@ -10,8 +10,8 @@ from image_waiter_server.image_processor import ImageProcessor
 
 logging.basicConfig(level=logging.INFO)
 
-# WORK_FOLDER = '/media/roman/Other/celebA'
-WORK_FOLDER = '/usr/work_dir'
+WORK_FOLDER = '/media/roman/Other/celebA'
+# WORK_FOLDER = '/usr/work_dir'
 CELEB_RAW_IMG_FOLDER = os.path.join(WORK_FOLDER, 'raw/raw')
 ALIGNED_CELEB_IMG_FOLDER = os.path.join(WORK_FOLDER, 'aligned_sized')
 ALIGNED_USER_IMG_FOLDER = os.path.join(WORK_FOLDER, 'tmp')
@@ -25,25 +25,27 @@ img_processor = ImageProcessor(
     aligned_img_size=160,
     pretrained_model=PRETRAINED_MODEL)
 
-@app.route('/')
-def hello_world():
-    return render_template('index.html')
-
 @app.route('/image/<filename>')
 def send_image(filename):
     return send_from_directory(CELEB_RAW_IMG_FOLDER, filename)
 
-@app.route('/upload', methods=['GET', 'POST'])
+@app.route('/usr_image/<filename>')
+def send_usr_image(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+@app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'GET':
         return render_template('index.html')
-    file = request.files['image']
+    if request.method == 'POST':
+        file = request.files['image']
+        if file.filename == '':
+            return render_template('index.html')
+        img_filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(img_filepath)
 
-    img_filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(img_filepath)
-
-    best_matches_img_names = img_processor.get_best_matches_imgs(img_filepath, 1)
-    return render_template('index.html', image_names=best_matches_img_names)
+        best_matches_img_names = img_processor.get_best_matches_imgs(img_filepath, 3)
+        return render_template('index.html', usr_image_name=file.filename, image_names=best_matches_img_names)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8081, debug=True)

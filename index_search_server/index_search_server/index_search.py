@@ -3,8 +3,8 @@ import random
 import logging
 from annoy import AnnoyIndex
 
-# ANNOY_FILEPATH = '/media/roman/Other/celebA/tmp/index.ann'
-ANNOY_FILEPATH = '/usr/tmp/index.ann'
+ANNOY_FILEPATH = '/media/roman/Other/celebA/tmp/index.ann'
+# ANNOY_FILEPATH = '/usr/tmp/index.ann'
 
 class IndexSearch(object):
     def get_best_matches(self, embedding, count):
