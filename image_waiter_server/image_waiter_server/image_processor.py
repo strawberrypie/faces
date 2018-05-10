@@ -32,7 +32,8 @@ class ImageProcessor(object):
         self._phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
         # index service
-        self._index_requester = IndexRequester(url='http://faces_index_search_1', port=8080)
+        # self._index_requester = IndexRequester(url='http://faces_index_search_1', port=8080)
+        self._index_requester = IndexRequester(url='http://localhost', port=8080)
 
     def get_img_filenames(self):
         paths = []

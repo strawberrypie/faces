@@ -1,29 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
   <meta charset="UTF-8">
-  <title>Similar Celebrities</title>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  <head>
+    <title>Similar Celebrities</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
 
 <body>
-<hr>
-<form action="/upload" method="post" enctype="multipart/form-data" >
-    <label class="btn btn-default btn-file">
-        Browse <input type="file" name="image" style="display: none;">
-    </label>
-    <input type="submit" value="Upload your image" class="btn btn-primary">
+<h3 class="card-header">Which celebrity do you look like?</h3>
+
+<form action="/" enctype="multipart/form-data" method="post">
+    <div class="upload-btn-wrapper">
+      <button class="btn">Browse image</button>
+      <input type="file" name="image"/>
+    </div>
+    <div class="upload-btn-wrapper">
+      <input class="btn" type="submit" value="Upload">
+    </div>
 </form>
 
 <div class="container">
+    {% if usr_image_name %}
+        <h4>Your image:</h4>
+        <img class="container_image" src=" {{url_for('send_usr_image', filename=usr_image_name)}}" height="300" border="2">
+    {% endif %}
     <div class="row">
-        <hr>
-        {% for image_name in image_names %}
-        <div class="col-lg-3 col-md-4 col-xs-6 thumb">
-            <img class="img-responsive" src=" {{url_for('send_image', filename=image_name)}}">
-        </div>
-        {% endfor %}
+        {% if usr_image_name %}
+            <h4>Celebrities:</h4>
+            {% for image_name in image_names %}
+                <img class="container_image" src=" {{url_for('send_image', filename=image_name)}}" height="300" margin-left="10">
+            {% endfor %}
+            {% if image_names|length < 1 %}
+                <h4>Can't find face in file, try again</h4>
+            {% endif %}
+        {% endif %}
     </div>
 </div>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
 
 </body>
 </html>
