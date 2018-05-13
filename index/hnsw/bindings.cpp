@@ -7,7 +7,7 @@ namespace py = pybind11;
 
 using KeyType = int64_t;
 using VectorType = std::vector<float>;
-using DistanceType = hnsw::CosineSimilarity;
+using DistanceType = hnsw::L2SquareDistance;
 using IndexType = hnsw::Index<KeyType, VectorType, DistanceType>;
 
 

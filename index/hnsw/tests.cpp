@@ -63,7 +63,7 @@ int main() {
     for (u_int32_t key = 0; key < n_vectors; ++key) {
         auto vector = generate_unit_sphere_vector(n_dim);
         index.insert(key, vector);
-        linear_index.emplace_back(std::pair(key, vector));
+        linear_index.emplace_back(std::make_pair(key, vector));
     }
     std::cout << "Indexes created!\n" << std::endl;
 
