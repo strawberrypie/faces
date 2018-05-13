@@ -9,7 +9,8 @@ from image_waiter_server.index_requester import IndexRequester, DummyIndexReques
 
 class ImageProcessor(object):
     def __init__(self, aligned_img_folder='../aligned_sized/', aligned_usr_img_folder='../tmp/',
-        aligned_img_size=160, pretrained_model='../pretrained_model'):
+        aligned_img_size=160, pretrained_model='../pretrained_model', debug=False):
+        self.debug = debug
         self._aligned_usr_img_folder = aligned_usr_img_folder
         self._aligned_img_folder = aligned_img_folder
         self._aligned_img_size = aligned_img_size
@@ -30,8 +31,8 @@ class ImageProcessor(object):
         self._phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
         # index service
-        # self._index_requester = IndexRequester(url='http://faces_index_search_1', port=8081)
-        self._index_requester = IndexRequester(url='http://localhost', port=8081)
+        index_requester_url = 'http://localhost' if self.debug else 'http://faces_index_search_1'
+        self._index_requester = IndexRequester(url=index_requester_url, port=8081)
 
     def get_img_filenames(self):
         paths = []
@@ -88,7 +89,13 @@ class ImageProcessor(object):
             logging.error("Can't get best idxs from index service")
             return []
         logging.info('best_idxs: {}\ndistances: {}'.format(best_idxs, distances))
-        return self._img_filenames[best_idxs]
+
+        try:
+            result = self._img_filenames[best_idxs]
+        except IndexError:
+            logging.error("Can't find images with indexes: {}".format(best_idxs))
+            result = []
+        return result
 
     def get_best_matches_imgs(self, img_filepath, count=1):
         if not os.path.isfile(img_filepath):
@@ -98,16 +105,16 @@ class ImageProcessor(object):
             logging.error("count should be int and > 0".format(count))
             return []
 
-        # align img
-        aligned_img_filepath = self.align_image(img_filepath)
+        try:
+            aligned_img_filepath = self.align_image(img_filepath)
+        except cv2.error as e:
+            aligned_img_filepath = None
         if aligned_img_filepath is None:
             logging.error("Can't find face on img: {}".format(img_filepath))
             return []
 
-        # find embeddings
         embedding = self.get_embedding(aligned_img_filepath)
 
-        # get request for best matches
         best_matches_img_names = self.get_best_matches_img_names(embedding, count)
         logging.info('best_matches_img_paths: {}'.format(best_matches_img_names))
         return best_matches_img_names

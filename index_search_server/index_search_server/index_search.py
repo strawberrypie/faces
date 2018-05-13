@@ -4,7 +4,7 @@ import logging
 from annoy import AnnoyIndex
 from hnsw_index import HNSWIndex
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     ANNOY_FILEPATH = '/media/roman/Other/celebA/tmp/index.ann'

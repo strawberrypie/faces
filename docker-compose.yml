@@ -3,7 +3,7 @@ services:
   image_waiter:
     build: image_waiter_server
     ports:
-      - "8081:8081"
+      - "8080:8080"
     volumes:
       - /media/roman/Other/celebA:/usr/work_dir
     depends_on:
@@ -11,6 +11,6 @@ services:
   index_search:
     build: index_search_server
     ports:
-      - "8080:8080"
+      - "8081:8081"
     volumes:
       - /media/roman/Other/celebA/tmp:/usr/tmp

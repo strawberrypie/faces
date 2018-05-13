@@ -11,7 +11,7 @@ import uuid
 logging.basicConfig(level=logging.INFO)
 from image_waiter_server.image_processor import ImageProcessor
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     WORK_FOLDER = '/media/roman/Other/celebA'
@@ -28,7 +28,8 @@ img_processor = ImageProcessor(
     aligned_img_folder=ALIGNED_CELEB_IMG_FOLDER,
     aligned_usr_img_folder=ALIGNED_USER_IMG_FOLDER,
     aligned_img_size=160,
-    pretrained_model=PRETRAINED_MODEL)
+    pretrained_model=PRETRAINED_MODEL,
+    debug=DEBUG)
 
 @app.route('/image/<filename>')
 def send_image(filename):
@@ -56,7 +57,3 @@ def upload_file():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
-
-# how to run:
-# from faces:
-# CUDA_VISIBLE_DEVICES="" python image_waiter_server/app.py
