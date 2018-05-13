@@ -10,7 +10,7 @@ from requests.exceptions import ConnectionError
 logging.basicConfig(level=logging.INFO)
 
 class IndexRequester(object):
-    def __init__(self, url='http://0.0.0.0', port=8080, retry_count=3, resend_timeout=3):
+    def __init__(self, url='http://0.0.0.0', port=8081, retry_count=3, resend_timeout=3):
         self._uri = os.path.join(url + ':' + str(port))
         self._best_matches_path = 'best_matches'
         self._retry_count = retry_count
@@ -57,9 +57,6 @@ class IndexRequester(object):
 
 
 class DummyIndexRequester(IndexRequester):
-    def __init__(self):
-        pass
-
     def get_best_idxs(self, embedding, count):
         idxs = [x for x in range(10)]
         random.shuffle(idxs)

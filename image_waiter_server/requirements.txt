@@ -5,3 +5,4 @@ numpy==1.14.1
 scipy
 scikit-learn
 tensorflow
+facenet

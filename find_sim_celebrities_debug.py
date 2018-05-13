@@ -329,8 +329,4 @@ if __name__ == '__main__':
                 args.user_img_path, args.worker_dir, args.debug, args.index_label)
 
 # python find_sim_celebrities_debug.py --resize_imgs --source_folder=../aligned/aligned --target_folder=../aligned_sized --debug
-# python find_sim_celebrities_debug.py --aligned_imgs_path=../aligned_sized --raw_imgs_path=../raw/raw --trained_model_path=../pretrained_model --user_img_path=../user_imgs/Angelina-Jolie.jpg --worker_dir=../tmp --debug --index_label
-
-# hnsw: index with 180537 embeddings in 725.2959592342377s
-# nms: index with 180537 embeddings in 0.1943962574005127s
-# annoy: index with 180537 embeddings in 95.74979639053345s
+# python find_sim_celebrities_debug.py --aligned_imgs_path=../aligned_sized --raw_imgs_path=../raw/raw --trained_model_path=../pretrained_model --user_img_path=../user_imgs/Angelina-Jolie.jpg --worker_dir=../tmp --debug --index_label=hnsw
