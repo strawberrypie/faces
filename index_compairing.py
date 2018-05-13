@@ -15,7 +15,7 @@ class Index(object):
 
     @property
     def dump_filename(self):
-        return self.name + 'pk'
+        return self.name + '.pk'
 
 class BruteForceIndex(Index):
     def __init__(self, X):
@@ -144,7 +144,7 @@ def sort_indexes_by_distance(idxs, distances):
 def test():
     X, Y = generate_data(train_size=100000, test_size=100)
     print('data sizes: train: {}, test: {}'.format(len(X), len(Y)))
-    cls_indexes = [BruteForceIndex, KDTreeIndex, NMSLibIndex, AnnoyGenIndex, HNSWCustomIndex]
+    cls_indexes = [BruteForceIndex, HNSWCustomIndex]
     brutforce_index = None
     indexes = []
     # init

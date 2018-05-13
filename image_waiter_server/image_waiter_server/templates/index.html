@@ -10,13 +10,18 @@
 <h3 class="card-header">Which celebrity do you look like?</h3>
 
 <form action="/" enctype="multipart/form-data" method="post">
-    <div class="upload-btn-wrapper">
-      <button class="btn">Browse image</button>
-      <input type="file" name="image"/>
-    </div>
-    <div class="upload-btn-wrapper">
-      <input class="btn" type="submit" value="Upload">
-    </div>
+    <input type="file" name="image"/>
+    <input class="btn" type="submit" value="Upload">
+
+    <label class="sr-only" for="img_count">Celebrities count</label>
+    <select class="form-control" id="img_count" name="img_count">
+        <option value="5">5</option>
+        <option value="4">4</option>
+        <option value="3" selected>3</option>
+        <option value="2">2</option>
+        <option value="1">1</option>
+    </select>
+
 </form>
 
 <div class="container">

@@ -2,13 +2,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# export PYTHONPATH=[path_to_facenet]/facenet/src
-import facenet
+from facenet.src import facenet
 
 import tensorflow as tf
 import numpy as np
 import argparse
-import lfw
 import os
 import sys
 import math
@@ -31,6 +29,7 @@ DEBUG_EXT = '.debug'
 EMBEDDINGS_FILE = 'embeddings.pickle'
 ANNOY_FILE = 'index.ann'
 NMS_FILE = 'index.nms'
+HNSW_FILE = 'index.hnsw'
 ANNOY_SIZE = 128
 HNSW_SIZE = 128
 ANNOY_TREES_COUNT = 10
@@ -122,7 +121,7 @@ def index_exists(tmp_dir, index_label, is_debug):
     elif index_label == 'nms':
         index_filename = NMS_FILE
     elif index_label == 'hnsw':
-        return False
+        index_filename = HNSW_FILE
     else:
         raise NotImlemented('not implemented index')
     if is_debug:
@@ -135,9 +134,12 @@ def create_annoy_index(tmp_dir, embeddings, is_debug):
     if is_debug:
         embeddings = embeddings[:DEBUG_COUNT]
         annoy_filename += DEBUG_EXT
+    start = time.time()
     for i, embedding in enumerate(embeddings):
         annoy_index.add_item(i, embedding)
     annoy_index.build(ANNOY_TREES_COUNT)
+    index_creation_time = time.time() - start
+    logging.info('created index with {} embeddings in {}s'.format(len(embeddings), index_creation_time))
     annoy_index.save(os.path.join(tmp_dir, annoy_filename))
     logging.info('saved annoy index: {}'.format(os.path.join(tmp_dir, annoy_filename)))
 
@@ -146,20 +148,29 @@ def create_nms_index(tmp_dir, embeddings, is_debug):
     if is_debug:
         embeddings = embeddings[:DEBUG_COUNT]
         nms_filename += DEBUG_EXT
+    nms_index_filepath = os.path.join(tmp_dir, nms_filename)
     nms_index = nmslib.init(method='hnsw', space='cosinesimil')
+    start = time.time()
     nms_index.addDataPointBatch(np.array(embeddings))
-    nms_index.createIndex({'post': 2}, print_progress=True)
-    nms_index.saveIndex(os.path.join(tmp_dir, nms_filename))
-    logging.info('saved nms index: {}'.format(os.path.join(tmp_dir, nms_filename)))
-
-hnsw_index = None
+    nms_index.createIndex({'post': 2}, print_progress=False)
+    index_creation_time = time.time() - start
+    logging.info('created index with {} embeddings in {}s'.format(len(embeddings), index_creation_time))
+    nms_index.saveIndex(nms_index_filepath)
+    logging.info('saved nms index: {}'.format(nms_index_filepath))
 
 def create_hnsw_index(tmp_dir, embeddings, is_debug):
-    global hnsw_index
-    hnsw_index = HNSWIndex(HNSW_SIZE)
+    hnsw_filename = HNSW_FILE
     if is_debug:
         embeddings = embeddings[:DEBUG_COUNT]
+        hnsw_filename += DEBUG_EXT
+    hnsw_index_filepath = os.path.join(tmp_dir, hnsw_filename)
+    hnsw_index = HNSWIndex(HNSW_SIZE)
+    start = time.time()
     hnsw_index.add_items(np.array(embeddings), np.arange(len(embeddings)))
+    index_creation_time = time.time() - start
+    logging.info('created index with {} embeddings in {}s'.format(len(embeddings), index_creation_time))
+    hnsw_index.save_index(hnsw_index_filepath)
+    logging.info('saved hnsw index: {}'.format(hnsw_index_filepath))
 
 def create_index(tmp_dir, embeddings, index_label, is_debug):
     if index_label == 'annoy':
@@ -190,6 +201,11 @@ def get_best_matches_nms_idxs(tmp_dir, user_img_index, is_debug, count=3):
     return best_matches_idxs
 
 def get_best_matches_hnsw_idxs(tmp_dir, user_img_index, is_debug, count=3):
+    hnsw_index_filepath = os.path.join(tmp_dir, HNSW_FILE)
+    if is_debug:
+        hnsw_index_filepath += DEBUG_EXT
+    hnsw_index = HNSWIndex(HNSW_SIZE)
+    hnsw_index.load_index(hnsw_index_filepath)
     best_matches_idxs, distances = hnsw_index.knn_query(np.array([user_img_index]), k=count)
     return best_matches_idxs[0]
 
@@ -314,3 +330,7 @@ if __name__ == '__main__':
 
 # python find_sim_celebrities_debug.py --resize_imgs --source_folder=../aligned/aligned --target_folder=../aligned_sized --debug
 # python find_sim_celebrities_debug.py --aligned_imgs_path=../aligned_sized --raw_imgs_path=../raw/raw --trained_model_path=../pretrained_model --user_img_path=../user_imgs/Angelina-Jolie.jpg --worker_dir=../tmp --debug --index_label
+
+# hnsw: index with 180537 embeddings in 725.2959592342377s
+# nms: index with 180537 embeddings in 0.1943962574005127s
+# annoy: index with 180537 embeddings in 95.74979639053345s

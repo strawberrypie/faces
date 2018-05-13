@@ -7,8 +7,6 @@ import tensorflow as tf
 import numpy as np
 from image_waiter_server.index_requester import IndexRequester, DummyIndexRequester
 
-logging.basicConfig(level=logging.INFO)
-
 class ImageProcessor(object):
     def __init__(self, aligned_img_folder='../aligned_sized/', aligned_usr_img_folder='../tmp/',
         aligned_img_size=160, pretrained_model='../pretrained_model'):
@@ -32,8 +30,8 @@ class ImageProcessor(object):
         self._phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
         # index service
-        # self._index_requester = IndexRequester(url='http://faces_index_search_1', port=8080)
-        self._index_requester = IndexRequester(url='http://localhost', port=8080)
+        # self._index_requester = IndexRequester(url='http://faces_index_search_1', port=8081)
+        self._index_requester = IndexRequester(url='http://localhost', port=8081)
 
     def get_img_filenames(self):
         paths = []
@@ -60,7 +58,7 @@ class ImageProcessor(object):
 
         _, img_name = os.path.split(img_filepath)
         aligned_img_path = os.path.join(self._aligned_usr_img_folder, img_name)
-        aligned_img_path = aligned_img_path[:-3]+self._aligned_img_ext
+        aligned_img_path = aligned_img_path[:-3]+'.'+self._aligned_img_ext
 
         img = cv2.imread(img_filepath)
 
@@ -70,8 +68,7 @@ class ImageProcessor(object):
 
         cv2.imwrite(aligned_img_path, aligned_img)
 
-        end_time = time.time()
-        logging.info('align_image time: {}s'.format(end_time - start_time))
+        logging.warning('align_image time: {}s'.format(time.time() - start_time))
         logging.info('aligned_img_path: {}'.format(aligned_img_path))
         return aligned_img_path
 
@@ -80,12 +77,13 @@ class ImageProcessor(object):
         images = facenet.load_data([img_path], False, False, self._aligned_img_size)
         feed_dict = {self._images_placeholder: images, self._phase_train_placeholder: False}
         embeddings_arr = self._sess.run(self._embeddings, feed_dict=feed_dict)
-        end_time = time.time()
-        logging.info('get_embedding time: {}s'.format(end_time - start_time))
+        logging.warning('get_embedding time: {}s'.format(time.time() - start_time))
         return embeddings_arr[0]
 
     def get_best_matches_img_names(self, embedding, count):
+        start_time = time.time()
         best_idxs, distances = self._index_requester.get_best_idxs(embedding, count)
+        logging.warning('get best matches time: {}s'.format(time.time() - start_time))
         if best_idxs is None:
             logging.error("Can't get best idxs from index service")
             return []
@@ -108,7 +106,6 @@ class ImageProcessor(object):
 
         # find embeddings
         embedding = self.get_embedding(aligned_img_filepath)
-        logging.info('embedding: {}'.format(embedding))
 
         # get request for best matches
         best_matches_img_names = self.get_best_matches_img_names(embedding, count)
