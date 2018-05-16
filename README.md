@@ -1,7 +1,7 @@
 # faces
 ## Finding Celebrity Look-alikes Using NMSW Index and Facenet Embeddings
 
-Сайт: http://93.175.11.8:8080
+Сайт: http://93.175.11.224:8080
 
 ### Промежуточный отчет
 
