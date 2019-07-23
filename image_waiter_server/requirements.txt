@@ -1,4 +1,4 @@
-requests==2.14.2
+requests==2.20.0
 Flask==1.0
 opencv_python==3.4.0.12
 numpy==1.14.1
