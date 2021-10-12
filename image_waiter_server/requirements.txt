@@ -1,6 +1,6 @@
 requests==2.20.0
 Flask==1.0
-opencv_python==3.4.0.12
+opencv_python==3.4.7.28
 numpy==1.14.1
 scipy
 scikit-learn
